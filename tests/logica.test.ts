@@ -60,7 +60,7 @@ describe('cuotas pendientes', () => {
   });
   it('pasa los dólares a pesos al dólar tarjeta', () => {
     const deuda = deudaPendiente([gasto(1, '2026-10-01', 10, { moneda: 'USD' })], hoy, 0, 2000);
-    assert.equal(deuda.total, 99_000);
+    assert.equal(deuda.total, 20_000);
   });
 });
 
