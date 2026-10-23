@@ -7,10 +7,12 @@ import { PlusJakartaSans_800ExtraBold } from '@expo-google-fonts/plus-jakarta-sa
 import { Ionicons } from '@expo/vector-icons';
 import type { Session } from '@supabase/supabase-js';
 import { useFonts } from 'expo-font';
+import * as Haptics from 'expo-haptics';
 import { router, Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, View, type ColorValue } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import PantallaLogin from '../components/PantallaLogin';
 import { ProveedorAvisos } from '../components/Toast';
 import { Objetivo, ProveedorTutorial } from '../components/Tutorial';
@@ -99,6 +101,14 @@ export default function Layout() {
         <Tabs
           // "Volver" sigue el historial real (de Ahorros vuelve a Más), no salta siempre a Inicio
           backBehavior="history"
+          // Al cambiar de pestaña se siente un toque suave; el botón de Cargar, uno un poco más firme
+          screenListeners={({ navigation, route }) => ({
+            tabPress: () => {
+              if (navigation.isFocused()) return;
+              if (route.name === 'cargar') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              else Haptics.selectionAsync();
+            },
+          })}
           screenOptions={{
             headerShown: false,
             sceneStyle: { backgroundColor: colores.fondo },
@@ -156,10 +166,25 @@ export default function Layout() {
 }
 
 // Ícono relleno en la pestaña activa y de contorno en las demás.
+// Al elegir la pestaña el ícono da un saltito (no al abrir la app).
 // Con objetivo, el recorrido guiado puede iluminar esa pestaña.
 function icono(nombre: 'home' | 'repeat' | 'chatbubbles' | 'grid', objetivo?: string) {
   function IconoPestana({ color, size, focused }: { color: ColorValue; size: number; focused: boolean }) {
-    const dibujo = <Ionicons name={focused ? nombre : `${nombre}-outline`} color={color} size={size - 1} />;
+    const escala = useSharedValue(1);
+    const estiloAnimado = useAnimatedStyle(() => ({ transform: [{ scale: escala.value }] }));
+    const primeraVez = useRef(true);
+    useEffect(() => {
+      if (primeraVez.current) {
+        primeraVez.current = false;
+        return;
+      }
+      if (focused) escala.set(withSequence(withTiming(1.15, { duration: 110 }), withSpring(1, { damping: 12 })));
+    }, [focused, escala]);
+    const dibujo = (
+      <Animated.View style={estiloAnimado}>
+        <Ionicons name={focused ? nombre : `${nombre}-outline`} color={color} size={size - 1} />
+      </Animated.View>
+    );
     return objetivo ? <Objetivo id={objetivo}>{dibujo}</Objetivo> : dibujo;
   }
   return IconoPestana;
