@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useRef, useState, type ReactNod
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colores } from '../constants/tema';
+import { colores, radios } from '../constants/tema';
 import { Texto } from './ui';
 
 type TipoAviso = 'exito' | 'error' | 'info';
@@ -72,10 +72,10 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: colores.superficie,
     borderWidth: 1,
-    borderRadius: 18,
+    borderRadius: radios.grande,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    shadowColor: '#000',
+    shadowColor: colores.sombra,
     shadowOpacity: 0.4,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },

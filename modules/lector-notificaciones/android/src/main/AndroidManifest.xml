@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!-- Recibe las notificaciones de otras apps, solo si el usuario lo habilita en Ajustes → Acceso a notificaciones -->
+    <service
+      android:name=".LectorService"
+      android:label="Sorted: detectar pagos"
+      android:exported="true"
+      android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+      <intent-filter>
+        <action android:name="android.service.notification.NotificationListenerService" />
+      </intent-filter>
+    </service>
+  </application>
+</manifest>

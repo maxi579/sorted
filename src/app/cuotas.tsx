@@ -11,8 +11,10 @@ import { useDatos } from '../lib/contextoDatos';
 import type { GastoConMedio } from '../lib/datos';
 import { deudaPendiente, diaDeLibertad, formatearMes, formatearMonto, proyectarCuotas, totalEnPesos, type MesProyectado } from '../lib/finanzas';
 import { useIndicadores } from '../lib/indicadores';
+import { Objetivo, useRecorridoSeccion } from '../components/Tutorial';
 
 export default function Cuotas() {
+  const ayuda = useRecorridoSeccion('cuotas');
   const datos = useDatos();
   const aviso = useAviso();
   const { dolarTarjeta, inflacionMensual } = useIndicadores();
@@ -48,31 +50,33 @@ export default function Cuotas() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contenido}>
-      <Encabezado titulo="Cuotas" subtitulo="Lo que ya tenés que pagar, mes por mes" />
+      <Encabezado titulo="Cuotas" subtitulo="Lo que ya tenés que pagar, mes por mes" volver ayuda={ayuda} />
 
-      <View style={styles.resumen}>
-        <Text style={styles.etiqueta}>Este mes tenés que pagar</Text>
-        <Text style={styles.montoGrande}>{formatearMonto(Math.round(mesActual.ars))}</Text>
-        {mesActual.usd > 0 && (
-          <Text style={styles.dolares}>
-            y {formatearMonto(mesActual.usd, 'USD')}
-            {dolarTarjeta ? ` (unos ${formatearMonto(Math.round(mesActual.usd * dolarTarjeta))} al dólar tarjeta)` : ''}
-          </Text>
-        )}
-
-        {porcentaje !== null ? (
-          <>
-            <View style={styles.barraFondo}>
-              <View style={[styles.barraRelleno, { width: `${Math.min(porcentaje, 100)}%`, backgroundColor: colorEstado }]} />
-            </View>
-            <Text style={[styles.porcentaje, { color: colorEstado }]}>
-              Es el {porcentaje.toFixed(0)}% de tu sueldo · te quedan {formatearMonto(Math.round(Math.max(sueldo! - totalMes(mesActual), 0)))}
+      <Objetivo id="cuotas-resumen">
+        <View style={styles.resumen}>
+          <Text style={styles.etiqueta}>Este mes tenés que pagar</Text>
+          <Text style={styles.montoGrande}>{formatearMonto(Math.round(mesActual.ars))}</Text>
+          {mesActual.usd > 0 && (
+            <Text style={styles.dolares}>
+              y {formatearMonto(mesActual.usd, 'USD')}
+              {dolarTarjeta ? ` (unos ${formatearMonto(Math.round(mesActual.usd * dolarTarjeta))} al dólar tarjeta)` : ''}
             </Text>
-          </>
-        ) : (
-          <Text style={styles.aviso}>Cargá tu sueldo en Ajustes para ver qué porcentaje representa.</Text>
-        )}
-      </View>
+          )}
+
+          {porcentaje !== null ? (
+            <>
+              <View style={styles.barraFondo}>
+                <View style={[styles.barraRelleno, { width: `${Math.min(porcentaje, 100)}%`, backgroundColor: colorEstado }]} />
+              </View>
+              <Text style={[styles.porcentaje, { color: colorEstado }]}>
+                Es el {porcentaje.toFixed(0)}% de tu sueldo · te quedan {formatearMonto(Math.round(Math.max(sueldo! - totalMes(mesActual), 0)))}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.aviso}>Cargá tu sueldo en Ajustes para ver qué porcentaje representa.</Text>
+          )}
+        </View>
+      </Objetivo>
 
       <View style={styles.encabezadoGrafico}>
         <Text style={styles.seccion}>Próximos 6 meses</Text>
@@ -129,7 +133,7 @@ export default function Cuotas() {
         {mesElegido.etiqueta}: {formatearMonto(Math.round(mesElegido.ars))}
         {mesElegido.usd > 0 ? ` + ${formatearMonto(mesElegido.usd, 'USD')}` : ''}
       </Text>
-      {mesElegido.cuotas.length === 0 && <Text style={styles.aviso}>Nada comprometido este mes. 🎉</Text>}
+      {mesElegido.cuotas.length === 0 && <Text style={styles.aviso}>Nada comprometido este mes.</Text>}
       {mesElegido.cuotas.map((c, i) => (
         <Animated.View key={`${seleccionado}-${c.gastoId}-${i}`} entering={FadeIn.delay(i * 30)} style={styles.item}>
           <View style={styles.itemIcono}>
@@ -199,7 +203,7 @@ const styles = StyleSheet.create({
   columna: { flex: 1, alignItems: 'center' },
   valorBarra: { color: colores.textoTenue, fontSize: 11, fontWeight: '600', marginBottom: 6 },
   zonaBarra: { flex: 1, width: '100%', justifyContent: 'flex-end' },
-  barra: { backgroundColor: colores.superficieAlta, borderRadius: 10 },
+  barra: { backgroundColor: colores.superficieAlta, borderRadius: radios.chico },
   barraSeleccionada: { backgroundColor: colores.primario },
   mes: { color: colores.textoTenue, fontSize: 13, marginTop: 8 },
   mesSeleccionado: { color: colores.primario, fontWeight: 'bold' },
@@ -208,13 +212,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     backgroundColor: colores.superficie,
-    borderRadius: 16,
+    borderRadius: radios.grande,
     padding: 14,
     marginBottom: 8,
     borderWidth: 1,
     borderColor: colores.borde,
   },
-  itemIcono: { width: 36, height: 36, borderRadius: 12, backgroundColor: colores.primarioSuave, alignItems: 'center', justifyContent: 'center' },
+  itemIcono: { width: 36, height: 36, borderRadius: radios.chico, backgroundColor: colores.primarioSuave, alignItems: 'center', justifyContent: 'center' },
   itemNombre: { color: colores.texto, fontSize: 15, fontWeight: '600' },
   itemDetalle: { color: colores.textoSecundario, fontSize: 12, marginTop: 2 },
   progresoFila: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },

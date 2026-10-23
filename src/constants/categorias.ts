@@ -4,15 +4,15 @@ import type { Categoria } from '../lib/tipos';
 type Estilo = { icono: keyof typeof Ionicons.glyphMap; color: string };
 
 export const ESTILO_CATEGORIA: Record<Categoria, Estilo> = {
-  'Comida y salidas': { icono: 'fast-food-outline', color: '#fb923c' },
-  Supermercado: { icono: 'cart-outline', color: '#34d399' },
-  Transporte: { icono: 'car-outline', color: '#60a5fa' },
-  Servicios: { icono: 'flash-outline', color: '#facc15' },
-  Compras: { icono: 'bag-handle-outline', color: '#f472b6' },
-  Salud: { icono: 'medkit-outline', color: '#f87171' },
-  Entretenimiento: { icono: 'game-controller-outline', color: '#a78bfa' },
-  Educación: { icono: 'school-outline', color: '#2dd4bf' },
-  Otros: { icono: 'ellipsis-horizontal-circle-outline', color: '#94a3b8' },
+  'Comida y salidas': { icono: 'fast-food-outline', color: '#F2A35E' },
+  Supermercado: { icono: 'cart-outline', color: '#5FD49A' },
+  Transporte: { icono: 'car-outline', color: '#7AAEF2' },
+  Servicios: { icono: 'flash-outline', color: '#E9C452' },
+  Compras: { icono: 'bag-handle-outline', color: '#E890BC' },
+  Salud: { icono: 'medkit-outline', color: '#EE8A80' },
+  Entretenimiento: { icono: 'game-controller-outline', color: '#AE9EF0' },
+  Educación: { icono: 'school-outline', color: '#56CDBD' },
+  Otros: { icono: 'ellipsis-horizontal-circle-outline', color: '#A3B1AA' },
 };
 
 export function estiloCategoria(categoria: string | null): Estilo {

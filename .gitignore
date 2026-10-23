@@ -44,3 +44,4 @@ example
 
 # Supabase CLI (configuración local)
 supabase/.temp/
+dist-app/

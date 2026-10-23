@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useState } from 'react';
+import type { MesInflacion } from './activos';
 import { MESES } from './finanzas';
 
 // Dólar tarjeta e inflación, traídos de APIs públicas gratuitas.
@@ -8,17 +9,29 @@ import { MESES } from './finanzas';
 export type Indicadores = {
   /** Dólar tarjeta (precio de venta), o null si nunca se pudo descargar */
   dolarTarjeta: number | null;
+  /** Dólar blue (precio de compra): lo que te dan por tus dólares */
+  dolarBlue: number | null;
   /** Inflación mensual estimada como fracción (0.02 = 2%): promedio de los últimos 3 meses */
   inflacionMensual: number;
   /** Último dato publicado por el INDEC, en % */
   ultimaInflacion: { mes: string; valor: number } | null;
+  /** Inflación de cada mes de los últimos 3 años, para calcular rendimientos reales */
+  serieInflacion: MesInflacion[];
   /** Cuándo se descargaron por última vez (ms), o null si son valores por defecto */
   actualizado: number | null;
 };
 
-const CLAVE = 'indicadores-v1';
+// v2: se agregaron el dólar blue y la serie de inflación (los datos de v1 no los tienen)
+const CLAVE = 'indicadores-v2';
 const VIGENCIA_MS = 6 * 60 * 60 * 1000;
-const POR_DEFECTO: Indicadores = { dolarTarjeta: null, inflacionMensual: 0.02, ultimaInflacion: null, actualizado: null };
+const POR_DEFECTO: Indicadores = {
+  dolarTarjeta: null,
+  dolarBlue: null,
+  inflacionMensual: 0.02,
+  ultimaInflacion: null,
+  serieInflacion: [],
+  actualizado: null,
+};
 
 let enMemoria: Indicadores | null = null;
 let descargaEnCurso: Promise<Indicadores> | null = null;
@@ -36,15 +49,21 @@ async function pedirJson(url: string) {
 }
 
 async function descargar(anteriores: Indicadores): Promise<Indicadores> {
-  const [dolar, inflacion] = await Promise.allSettled([
+  const [dolar, blue, inflacion] = await Promise.allSettled([
     pedirJson('https://dolarapi.com/v1/dolares/tarjeta'),
+    pedirJson('https://dolarapi.com/v1/dolares/blue'),
     pedirJson('https://api.argentinadatos.com/v1/finanzas/indices/inflacion'),
   ]);
-  const nuevos = { ...anteriores };
+  // Lo guardado con una versión anterior de la app puede no tener todos los campos
+  const nuevos = { ...POR_DEFECTO, ...anteriores };
   let algunoNuevo = false;
 
   if (dolar.status === 'fulfilled' && Number(dolar.value?.venta) > 0) {
     nuevos.dolarTarjeta = Number(dolar.value.venta);
+    algunoNuevo = true;
+  }
+  if (blue.status === 'fulfilled' && Number(blue.value?.compra) > 0) {
+    nuevos.dolarBlue = Number(blue.value.compra);
     algunoNuevo = true;
   }
   if (inflacion.status === 'fulfilled' && Array.isArray(inflacion.value) && inflacion.value.length >= 3) {
@@ -52,6 +71,7 @@ async function descargar(anteriores: Indicadores): Promise<Indicadores> {
     nuevos.inflacionMensual = ultimos.reduce((suma, m) => suma + Number(m.valor), 0) / 3 / 100;
     const ultimo = ultimos[ultimos.length - 1];
     nuevos.ultimaInflacion = { mes: ultimo.fecha, valor: Number(ultimo.valor) };
+    nuevos.serieInflacion = inflacion.value.slice(-36).map((m: MesInflacion) => ({ fecha: m.fecha, valor: Number(m.valor) }));
     algunoNuevo = true;
   }
   if (!algunoNuevo) throw new Error('Sin conexión');
@@ -73,6 +93,7 @@ export async function obtenerIndicadores(): Promise<Indicadores> {
         guardados = null;
       }
     }
+    if (guardados) guardados = { ...POR_DEFECTO, ...guardados };
     if (guardados?.actualizado && Date.now() - guardados.actualizado < VIGENCIA_MS) return guardados;
 
     try {

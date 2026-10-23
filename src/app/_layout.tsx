@@ -13,8 +13,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, View, type ColorValue } from 'react-native';
 import PantallaLogin from '../components/PantallaLogin';
 import { ProveedorAvisos } from '../components/Toast';
+import { Objetivo, ProveedorTutorial } from '../components/Tutorial';
 import { colores, fuentes } from '../constants/tema';
+import * as Linking from 'expo-linking';
 import { escucharToques } from '../lib/avisos';
+import { sesionDesdeLink, traeSesion } from '../lib/ingresoSocial';
+import { ProveedorBloqueo } from '../components/Bloqueo';
 import { ProveedorDatos } from '../lib/contextoDatos';
 import { fuenteSupabase } from '../lib/datos';
 import { crearFuenteDemo } from '../lib/demo';
@@ -24,6 +28,7 @@ export default function Layout() {
   const [sesion, setSesion] = useState<Session | null>(null);
   const [cargando, setCargando] = useState(!soloDemo);
   const [modoDemo, setModoDemo] = useState(soloDemo);
+  const [errorIngreso, setErrorIngreso] = useState<string | null>(null);
   const [fuentesListas] = useFonts({
     PlusJakartaSans_400Regular,
     PlusJakartaSans_500Medium,
@@ -40,6 +45,26 @@ export default function Layout() {
     });
     const { data } = supabase.auth.onAuthStateChange((_evento, nuevaSesion) => setSesion(nuevaSesion));
     return () => data.subscription.unsubscribe();
+  }, []);
+
+  // Al volver de Google la sesión llega en el link: en la web, en la dirección de la página;
+  // en el celular, normalmente la atrapa la ventana de Google, y si no, llega como link a la app.
+  useEffect(() => {
+    if (soloDemo) return;
+    const atender = (url: string | null) => {
+      if (!url || !traeSesion(url)) return;
+      sesionDesdeLink(url).catch((e) => setErrorIngreso((e as Error).message));
+    };
+    if (Platform.OS === 'web') {
+      const url = window.location.href;
+      // Sacamos los datos de la dirección para que no queden a la vista ni en el historial
+      if (traeSesion(url)) window.history.replaceState(null, '', window.location.pathname);
+      atender(url);
+      return;
+    }
+    Linking.getInitialURL().then(atender);
+    const suscripcion = Linking.addEventListener('url', ({ url }) => atender(url));
+    return () => suscripcion.remove();
   }, []);
 
   // Tocar el recordatorio de la noche abre directo la pantalla para anotar
@@ -66,11 +91,14 @@ export default function Layout() {
       </View>
     );
   } else if (!sesion && !modoDemo) {
-    contenido = <PantallaLogin onProbarDemo={() => setModoDemo(true)} />;
+    contenido = <PantallaLogin onProbarDemo={() => setModoDemo(true)} errorInicial={errorIngreso} />;
   } else {
     contenido = (
       <ProveedorDatos fuente={fuente}>
+        <ProveedorTutorial listo>
         <Tabs
+          // "Volver" sigue el historial real (de Ahorros vuelve a Más), no salta siempre a Inicio
+          backBehavior="history"
           screenOptions={{
             headerShown: false,
             sceneStyle: { backgroundColor: colores.fondo },
@@ -81,26 +109,42 @@ export default function Layout() {
           }}
         >
           <Tabs.Screen name="index" options={{ title: 'Inicio', tabBarIcon: icono('home') }} />
-          <Tabs.Screen name="cuotas" options={{ title: 'Cuotas', tabBarIcon: icono('calendar') }} />
+          <Tabs.Screen name="fijos" options={{ title: 'Fijos', tabBarIcon: icono('repeat', 'pestana-fijos') }} />
           <Tabs.Screen
             name="cargar"
             options={{
               title: 'Cargar',
               tabBarLabel: () => null,
               tabBarIcon: () => (
-                <View style={styles.botonCargar}>
-                  <Ionicons name="add" size={28} color={colores.sobrePrimario} />
-                </View>
+                <Objetivo id="pestana-cargar">
+                  <View style={styles.botonCargar}>
+                    <Ionicons name="add" size={26} color={colores.sobrePrimario} accessibilityLabel="Cargar gasto" />
+                  </View>
+                </Objetivo>
               ),
             }}
           />
-          <Tabs.Screen name="comprar" options={{ title: 'Comprar', tabBarIcon: icono('bag-check') }} />
-          <Tabs.Screen name="ajustes" options={{ title: 'Ajustes', tabBarIcon: icono('settings') }} />
-          {/* Pantalla sin pestaña: se abre desde Cargar */}
+          <Tabs.Screen name="chat" options={{ title: 'Asistente', tabBarIcon: icono('chatbubbles', 'pestana-asistente') }} />
+          <Tabs.Screen name="mas" options={{ title: 'Más', tabBarIcon: icono('grid', 'pestana-mas') }} />
+          {/* Pantallas sin pestaña: se abren desde "Más" o desde Inicio */}
+          <Tabs.Screen name="cuotas" options={{ href: null, title: 'Cuotas' }} />
+          <Tabs.Screen name="comprar" options={{ href: null, title: '¿Lo compro?' }} />
+          <Tabs.Screen name="ajustes" options={{ href: null, title: 'Ajustes' }} />
           <Tabs.Screen name="resumen" options={{ href: null, title: 'Revisar resumen' }} />
+          <Tabs.Screen name="efectivo" options={{ href: null, title: 'Efectivo' }} />
+          <Tabs.Screen name="activos" options={{ href: null, title: 'Activos' }} />
+          <Tabs.Screen name="ahorros" options={{ href: null, title: 'Ahorros' }} />
+          <Tabs.Screen name="rendimiento" options={{ href: null, title: '¿Cuánto me rinde?' }} />
+          <Tabs.Screen name="revisar" options={{ href: null, title: 'Pagos para revisar' }} />
+          <Tabs.Screen name="automatico" options={{ href: null, title: 'Anotar sin esfuerzo' }} />
+          <Tabs.Screen name="privacidad" options={{ href: null, title: 'Privacidad' }} />
+          <Tabs.Screen name="exportar" options={{ href: null, title: 'Exportar a PDF' }} />
         </Tabs>
+        </ProveedorTutorial>
       </ProveedorDatos>
     );
+    // Face ID / huella al abrir (solo con cuenta: el modo de prueba no tiene nada que proteger)
+    if (!modoDemo) contenido = <ProveedorBloqueo onSalir={() => fuente.salir()}>{contenido}</ProveedorBloqueo>;
   }
 
   return (
@@ -111,10 +155,12 @@ export default function Layout() {
   );
 }
 
-// Ícono relleno en la pestaña activa y de contorno en las demás
-function icono(nombre: 'home' | 'calendar' | 'bag-check' | 'settings') {
+// Ícono relleno en la pestaña activa y de contorno en las demás.
+// Con objetivo, el recorrido guiado puede iluminar esa pestaña.
+function icono(nombre: 'home' | 'repeat' | 'chatbubbles' | 'grid', objetivo?: string) {
   function IconoPestana({ color, size, focused }: { color: ColorValue; size: number; focused: boolean }) {
-    return <Ionicons name={focused ? nombre : `${nombre}-outline`} color={color} size={size - 1} />;
+    const dibujo = <Ionicons name={focused ? nombre : `${nombre}-outline`} color={color} size={size - 1} />;
+    return objetivo ? <Objetivo id={objetivo}>{dibujo}</Objetivo> : dibujo;
   }
   return IconoPestana;
 }
@@ -122,23 +168,25 @@ function icono(nombre: 'home' | 'calendar' | 'bag-check' | 'settings') {
 const styles = StyleSheet.create({
   barra: {
     backgroundColor: colores.superficie,
-    borderTopColor: colores.borde,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    // Sin borde ni sombra arriba: se veía como una línea blanca sobre la barra
+    borderTopWidth: 0,
+    elevation: 0,
+    shadowOpacity: 0,
     // En la web no hay área segura abajo: le damos un poco más de alto para que entren los textos
-    ...(Platform.OS === 'web' && { height: 62, paddingBottom: 6 }),
+    // En el iPhone con la web agregada a la pantalla de inicio, suma el espacio de la rayita de abajo
+    ...(Platform.OS === 'web' && {
+      height: 'calc(62px + env(safe-area-inset-bottom))' as unknown as number,
+      paddingBottom: 'max(6px, env(safe-area-inset-bottom))' as unknown as number,
+    }),
   },
+  // Pastilla sólida, sin halo: se distingue por forma y color, no por brillo
   botonCargar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 56,
+    height: 40,
+    borderRadius: 999,
     marginTop: 8,
     backgroundColor: colores.primario,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colores.primario,
-    shadowOpacity: 0.45,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
   },
 });

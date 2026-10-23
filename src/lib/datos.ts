@@ -1,14 +1,41 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { nuevoId } from './ids';
 import { supabase } from './supabase';
-import type { GastoGuardado, MedioPago, Tono } from './tipos';
+import type { Activo, Aporte, Conteo, Fijo, GastoGuardado, MedioPago, Meta, PagoFijo, ReciboSueldo, Retiro, Sugerencia, Tono } from './tipos';
 
 // Todo el acceso a datos pasa por acá. Las pantallas no saben si los datos
 // vienen de Supabase o del modo demo: solo usan una FuenteDatos.
 
-export type Perfil = { nombre: string | null; sueldo: number | null; tono: Tono };
+export type Perfil = {
+  nombre: string | null;
+  sueldo: number | null;
+  tono: Tono;
+  /** Código de la dirección de mail para reenviar pagos (ver Ajustes) */
+  codigoMail?: string | null;
+};
 export type GastoConMedio = GastoGuardado & { tarjetas: { nombre: string } | null; pendiente?: boolean };
 export type FilaGasto = Omit<GastoGuardado, 'id'> & { id?: string; texto_original?: string };
 export type FilaMedio = Omit<MedioPago, 'id'>;
+type SinId<T> = Omit<T, 'id'> & { id?: string };
+export type FilaFijo = SinId<Fijo>;
+export type FilaPagoFijo = SinId<PagoFijo>;
+export type FilaRetiro = SinId<Retiro>;
+export type FilaActivo = SinId<Activo>;
+export type FilaSugerencia = SinId<Sugerencia>;
+export type FilaMeta = SinId<Meta>;
+export type FilaAporte = SinId<Aporte>;
+export type FilaRecibo = SinId<ReciboSueldo>;
+/** El momento del conteo lo pone la base */
+export type FilaConteo = { id?: string; monto: number };
+
+/** Listar, crear, cambiar y borrar: lo mismo para fijos, retiros, activos... */
+export interface Coleccion<T, F> {
+  listar(): Promise<T[]>;
+  crear(fila: F): Promise<void>;
+  actualizar(id: string, cambios: Partial<F>): Promise<void>;
+  borrar(id: string): Promise<void>;
+}
+
 /** 'pendiente' = no había internet: quedó guardado en el celular y se sube solo después */
 export type ResultadoGuardado = 'guardado' | 'pendiente';
 
@@ -26,6 +53,17 @@ export interface FuenteDatos {
   crearMedio(fila: FilaMedio): Promise<void>;
   actualizarMedio(id: string, fila: FilaMedio): Promise<void>;
   borrarMedio(id: string): Promise<void>;
+  fijos: Coleccion<Fijo, FilaFijo>;
+  pagosFijos: Coleccion<PagoFijo, FilaPagoFijo>;
+  retiros: Coleccion<Retiro, FilaRetiro>;
+  activos: Coleccion<Activo, FilaActivo>;
+  sugerencias: Coleccion<Sugerencia, FilaSugerencia>;
+  conteos: Coleccion<Conteo, FilaConteo>;
+  metas: Coleccion<Meta, FilaMeta>;
+  aportes: Coleccion<Aporte, FilaAporte>;
+  recibos: Coleccion<ReciboSueldo, FilaRecibo>;
+  /** Para mandarle al celular el aviso de un pago que llegó por mail */
+  guardarPushToken(token: string): Promise<void>;
   salir(): Promise<void>;
 }
 
@@ -35,15 +73,48 @@ function revisar<T>({ data, error }: { data: T; error: { message: string } | nul
   return data;
 }
 
+// Supabase devuelve las columnas numeric como texto: las pasamos a número
+function aNumeros<T>(campos: string[]) {
+  return (fila: Record<string, unknown>) => {
+    const copia: Record<string, unknown> = { ...fila };
+    for (const campo of campos) if (copia[campo] !== null && copia[campo] !== undefined) copia[campo] = Number(copia[campo]);
+    return copia as T;
+  };
+}
+
+function coleccionRemota<T, F>(tabla: string, convertir: (fila: Record<string, unknown>) => T, orden = 'creado_en'): Coleccion<T, F> {
+  return {
+    async listar() {
+      const filas = revisar(await supabase.from(tabla).select('*').order(orden, { ascending: false }));
+      return ((filas ?? []) as Record<string, unknown>[]).map(convertir);
+    },
+    async crear(fila) {
+      revisar(await supabase.from(tabla).insert({ ...fila, id: (fila as { id?: string }).id ?? nuevoId() }));
+    },
+    async actualizar(id, cambios) {
+      revisar(await supabase.from(tabla).update(cambios as Record<string, unknown>).eq('id', id));
+    },
+    async borrar(id) {
+      revisar(await supabase.from(tabla).delete().eq('id', id));
+    },
+  };
+}
+
 const fuenteRemota: FuenteDatos = {
   esDemo: false,
 
   async perfil() {
-    const fila = revisar(await supabase.from('perfiles').select('nombre, sueldo, tono_asistente').single());
+    // codigo_mail viene de la migración 001: si todavía no se corrió, leemos el perfil sin esa columna
+    let respuesta = await supabase.from('perfiles').select('nombre, sueldo, tono_asistente, codigo_mail').single();
+    if (respuesta.error && /codigo_mail/.test(respuesta.error.message)) {
+      respuesta = (await supabase.from('perfiles').select('nombre, sueldo, tono_asistente').single()) as typeof respuesta;
+    }
+    const fila = revisar(respuesta);
     return {
       nombre: fila?.nombre ?? null,
       sueldo: fila?.sueldo ? Number(fila.sueldo) : null,
       tono: (fila?.tono_asistente as Tono) ?? 'directo',
+      codigoMail: fila?.codigo_mail ?? null,
     };
   },
 
@@ -97,6 +168,24 @@ const fuenteRemota: FuenteDatos = {
     revisar(await supabase.from('tarjetas').delete().eq('id', id));
   },
 
+  fijos: coleccionRemota<Fijo, FilaFijo>('fijos', aNumeros(['monto'])),
+  pagosFijos: coleccionRemota<PagoFijo, FilaPagoFijo>('pagos_fijos', aNumeros(['monto']), 'mes'),
+  retiros: coleccionRemota<Retiro, FilaRetiro>('retiros', aNumeros(['monto']), 'fecha'),
+  activos: coleccionRemota<Activo, FilaActivo>(
+    'activos',
+    aNumeros(['monto_inicial', 'cantidad', 'tna', 'plazo_dias', 'valor_actual', 'depreciacion_anual'])
+  ),
+  sugerencias: coleccionRemota<Sugerencia, FilaSugerencia>('sugerencias', aNumeros(['monto'])),
+  conteos: coleccionRemota<Conteo, FilaConteo>('conteos_efectivo', aNumeros(['monto'])),
+  metas: coleccionRemota<Meta, FilaMeta>('metas_ahorro', aNumeros(['objetivo', 'ahorro_mensual'])),
+  aportes: coleccionRemota<Aporte, FilaAporte>('aportes_ahorro', aNumeros(['monto']), 'fecha'),
+  recibos: coleccionRemota<ReciboSueldo, FilaRecibo>('recibos_sueldo', aNumeros(['bruto', 'neto']), 'periodo'),
+
+  async guardarPushToken(token) {
+    const { data } = await supabase.auth.getUser();
+    revisar(await supabase.from('perfiles').update({ push_token: token }).eq('id', data.user!.id));
+  },
+
   async salir() {
     await supabase.auth.signOut();
   },
@@ -104,7 +193,25 @@ const fuenteRemota: FuenteDatos = {
 
 // ---------- Funcionar sin conexión ----------
 
-const CLAVES = { perfil: 'cache-perfil', gastos: 'cache-gastos', medios: 'cache-medios', cola: 'gastos-sin-subir' };
+const CLAVES = {
+  perfil: 'cache-perfil',
+  gastos: 'cache-gastos',
+  medios: 'cache-medios',
+  cola: 'gastos-sin-subir',
+  fijos: 'cache-fijos',
+  pagosFijos: 'cache-pagos-fijos',
+  retiros: 'cache-retiros',
+  activos: 'cache-activos',
+  sugerencias: 'cache-sugerencias',
+  conteos: 'cache-conteos',
+  metas: 'cache-metas',
+  aportes: 'cache-aportes',
+  recibos: 'cache-recibos',
+  // La conversación con el asistente con IA (la guarda la pantalla de chat)
+  chat: 'chat-ia',
+  // El bloqueo con Face ID / huella es de este dispositivo y de esta cuenta
+  bloqueo: 'bloqueo-biometrico',
+};
 const SIN_CONEXION = 'No hay internet. Probá de nuevo cuando tengas conexión.';
 
 function esErrorDeConexion(e: unknown) {
@@ -151,17 +258,6 @@ async function escribir<T>(pedido: () => Promise<T>): Promise<T> {
   }
 }
 
-// UUID v4: el id del gasto se crea en el celular, así si se reintenta subir no se duplica
-function nuevoId() {
-  const bytes = new Uint8Array(16);
-  if (globalThis.crypto?.getRandomValues) globalThis.crypto.getRandomValues(bytes);
-  else for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const h = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
-}
-
 type GastoEnCola = GastoConMedio & { texto_original?: string };
 
 function aFila({ tarjetas: _t, pendiente: _p, ...fila }: GastoEnCola): FilaGasto {
@@ -170,6 +266,16 @@ function aFila({ tarjetas: _t, pendiente: _p, ...fila }: GastoEnCola): FilaGasto
 
 function esDuplicado(e: unknown) {
   return /duplicate key|23505/i.test(String((e as Error)?.message ?? e));
+}
+
+// Lee con respaldo en el celular y escribe con un mensaje claro si no hay internet
+function conCache<T, F>(clave: string, base: Coleccion<T, F>): Coleccion<T, F> {
+  return {
+    listar: () => conRespaldo(clave, base.listar),
+    crear: (fila) => escribir(() => base.crear(fila)),
+    actualizar: (id, cambios) => escribir(() => base.actualizar(id, cambios)),
+    borrar: (id) => escribir(() => base.borrar(id)),
+  };
 }
 
 function crearFuenteSupabase(base: FuenteDatos): FuenteDatos {
@@ -261,6 +367,16 @@ function crearFuenteSupabase(base: FuenteDatos): FuenteDatos {
     crearMedio: (fila) => escribir(() => base.crearMedio(fila)),
     actualizarMedio: (id, fila) => escribir(() => base.actualizarMedio(id, fila)),
     borrarMedio: (id) => escribir(() => base.borrarMedio(id)),
+    fijos: conCache(CLAVES.fijos, base.fijos),
+    pagosFijos: conCache(CLAVES.pagosFijos, base.pagosFijos),
+    retiros: conCache(CLAVES.retiros, base.retiros),
+    activos: conCache(CLAVES.activos, base.activos),
+    sugerencias: conCache(CLAVES.sugerencias, base.sugerencias),
+    conteos: conCache(CLAVES.conteos, base.conteos),
+    metas: conCache(CLAVES.metas, base.metas),
+    aportes: conCache(CLAVES.aportes, base.aportes),
+    recibos: conCache(CLAVES.recibos, base.recibos),
+    guardarPushToken: (token) => escribir(() => base.guardarPushToken(token)),
 
     // Al salir se borra todo lo guardado en el celular: si lo usa otra persona, no ve tus datos
     async salir() {

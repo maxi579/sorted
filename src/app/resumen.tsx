@@ -15,10 +15,12 @@ import { formatearMonto } from '../lib/finanzas';
 import { movimientosDeEjemplo, revisarMovimientos, type MovimientoRevisado } from '../lib/conciliacion';
 import { leerResumen } from '../lib/resumen';
 import type { MedioPago } from '../lib/tipos';
+import { Objetivo, useRecorridoSeccion } from '../components/Tutorial';
 
 type Etapa = 'elegir' | 'leyendo' | 'revisar';
 
 export default function Resumen() {
+  const ayuda = useRecorridoSeccion('resumen');
   const datos = useDatos();
   const aviso = useAviso();
   const insets = useSafeAreaInsets();
@@ -117,37 +119,39 @@ export default function Resumen() {
         <Ionicons name="chevron-back" size={20} color={colores.primario} />
         <Text style={styles.volverTexto}>Volver</Text>
       </Pressable>
-      <Encabezado titulo="Revisar el resumen" subtitulo="Te muestro los gastos de la tarjeta que te olvidaste de anotar." />
+      <Encabezado titulo="Revisar el resumen" subtitulo="Te muestro los gastos de la tarjeta que te olvidaste de anotar." volver ayuda={ayuda} />
 
       {etapa === 'elegir' && (
-        <View style={styles.tarjeta}>
-          {medios.length === 0 ? (
-            <>
-              <Text style={styles.texto}>Para revisar un resumen, primero agregá tu tarjeta de crédito en Ajustes.</Text>
-              <Boton titulo="Ir a Ajustes" variante="secundario" onPress={() => router.push('/ajustes')} estilo={{ marginTop: 14 }} />
-            </>
-          ) : (
-            <>
-              <Text style={styles.pregunta}>¿De qué tarjeta es el resumen?</Text>
-              <View style={styles.chips}>
-                {medios.map((m) => (
-                  <Chip key={m.id} etiqueta={m.nombre} activo={medioId === m.id} onPress={() => setMedioId(m.id)} />
-                ))}
-              </View>
+        <Objetivo id="resumen-subir">
+          <View style={styles.tarjeta}>
+            {medios.length === 0 ? (
+              <>
+                <Text style={styles.texto}>Para revisar un resumen, primero agregá tu tarjeta de crédito en Ajustes.</Text>
+                <Boton titulo="Ir a Ajustes" variante="secundario" onPress={() => router.push('/ajustes')} estilo={{ marginTop: 14 }} />
+              </>
+            ) : (
+              <>
+                <Text style={styles.pregunta}>¿De qué tarjeta es el resumen?</Text>
+                <View style={styles.chips}>
+                  {medios.map((m) => (
+                    <Chip key={m.id} etiqueta={m.nombre} activo={medioId === m.id} onPress={() => setMedioId(m.id)} />
+                  ))}
+                </View>
 
-              <View style={styles.pasos}>
-                <Paso numero={1} texto="Descargá el resumen en PDF desde la app o la página de tu banco." />
-                <Paso numero={2} texto="Tocá el botón de abajo y elegí ese archivo." />
-                <Paso numero={3} texto="Te muestro lo que te faltaba anotar y lo agregás con un toque." />
-              </View>
+                <View style={styles.pasos}>
+                  <Paso numero={1} texto="Descargá el resumen en PDF desde la app o la página de tu banco." />
+                  <Paso numero={2} texto="Tocá el botón de abajo y elegí ese archivo." />
+                  <Paso numero={3} texto="Te muestro lo que te faltaba anotar y lo agregás con un toque." />
+                </View>
 
-              <Boton titulo={datos.esDemo ? 'Probar con un resumen de ejemplo' : 'Elegir el PDF del resumen'} onPress={elegirArchivo} />
-              <Text style={styles.privacidad}>
-                🔒 El resumen lo lee una inteligencia artificial (Claude) para encontrar las compras. No se guarda en ningún lado.
-              </Text>
-            </>
-          )}
-        </View>
+                <Boton titulo={datos.esDemo ? 'Probar con un resumen de ejemplo' : 'Elegir el PDF del resumen'} onPress={elegirArchivo} />
+                <Text style={styles.privacidad}>
+                  🔒 El resumen lo lee una inteligencia artificial (Claude) para encontrar las compras. No se guarda en ningún lado.
+                </Text>
+              </>
+            )}
+          </View>
+        </Objetivo>
       )}
 
       {etapa === 'leyendo' && (
@@ -285,7 +289,7 @@ const styles = StyleSheet.create({
   },
   itemMarcado: { borderColor: colores.primario },
   itemCargado: { opacity: 0.75 },
-  icono: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  icono: { width: 34, height: 34, borderRadius: radios.chico, alignItems: 'center', justifyContent: 'center' },
   descripcion: { color: colores.texto, fontSize: 15, fontWeight: '600' },
   detalle: { color: colores.textoSecundario, fontSize: 13, marginTop: 2 },
   monto: { color: colores.texto, fontSize: 15, fontWeight: '700' },

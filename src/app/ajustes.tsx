@@ -1,8 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { useBloqueo } from '../components/Bloqueo';
 import FormularioMedioPago from '../components/FormularioMedioPago';
+import RecibosSueldo from '../components/RecibosSueldo';
 import { useAviso } from '../components/Toast';
 import { confirmar, Encabezado, Entrada as TextInput, Texto as Text } from '../components/ui';
 import { colores, radios } from '../constants/tema';
@@ -15,16 +17,19 @@ import {
   desactivarAvisos,
   desactivarRecordatorio,
   programarAvisosCierre,
+  programarAvisosVencimiento,
   recordatorioActivado,
 } from '../lib/avisos';
 import { useDatos } from '../lib/contextoDatos';
 import { formatearFecha, formatearMonto } from '../lib/finanzas';
 import { formatearEntradaMonto, leerMonto, montoATexto } from '../lib/formato';
 import { mesDeInflacion, useIndicadores } from '../lib/indicadores';
-import { soloDemo } from '../lib/supabase';
+import { soloDemo, supabase } from '../lib/supabase';
 import type { MedioPago, Tono } from '../lib/tipos';
+import { Objetivo, useRecorridoSeccion } from '../components/Tutorial';
 
 export default function Ajustes() {
+  const ayuda = useRecorridoSeccion('ajustes');
   const datos = useDatos();
   const aviso = useAviso();
   const indicadores = useIndicadores();
@@ -35,6 +40,8 @@ export default function Ajustes() {
   const [tono, setTono] = useState<Tono>('directo');
   const [avisos, setAvisos] = useState(false);
   const [recordatorio, setRecordatorio] = useState(false);
+  const bloqueo = useBloqueo();
+  const [cambiandoBloqueo, setCambiandoBloqueo] = useState(false);
 
   useEffect(() => {
     avisosActivados().then(setAvisos);
@@ -97,8 +104,37 @@ export default function Ajustes() {
     }
     const ok = await activarAvisos(medios);
     setAvisos(ok);
-    if (ok) aviso('Te aviso un día antes de cada cierre 🔔');
+    if (ok) {
+      Promise.all([datos.fijos.listar(), datos.pagosFijos.listar()])
+        .then(([fijos, pagos]) => programarAvisosVencimiento(fijos, pagos))
+        .catch(() => {});
+      aviso('Te aviso un día antes de cada cierre y vencimiento 🔔');
+    }
     else aviso('No tengo permiso para avisarte. Activalo en la configuración del celular.', 'error');
+  }
+
+  async function cambiarBloqueo(activar: boolean) {
+    setCambiandoBloqueo(true);
+    try {
+      await bloqueo.cambiar(activar);
+      aviso(activar ? `Listo: Sorted te pide ${bloqueo.biometria?.nombre ?? 'Face ID'} al abrirla 🔒` : 'Bloqueo apagado', activar ? undefined : 'info');
+    } catch (e) {
+      aviso((e as Error).message, 'error');
+    }
+    setCambiandoBloqueo(false);
+  }
+
+  function borrarCuenta() {
+    confirmar(
+      'Borrar mi cuenta',
+      'Se borran tu cuenta y todos tus datos: gastos, cuotas, fijos, ahorros, todo. No se puede deshacer.',
+      'Borrar todo',
+      async () => {
+        const { error } = await supabase.functions.invoke('borrar-cuenta');
+        if (error) return aviso('No se pudo borrar la cuenta. Probá de nuevo en un rato.', 'error');
+        await datos.salir().catch(() => supabase.auth.signOut({ scope: 'local' }));
+      }
+    );
   }
 
   async function cambiarRecordatorio(activar: boolean) {
@@ -134,28 +170,33 @@ export default function Ajustes() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
-      <Encabezado titulo="Ajustes" />
+      <Encabezado titulo="Ajustes" subtitulo="Tu sueldo, tus tarjetas y los avisos" volver ayuda={ayuda} />
 
-      <Text style={styles.seccion}>¿Cuánto cobrás por mes?</Text>
-      <Text style={styles.pista}>Lo uso para decirte qué parte de tu sueldo ya está ocupada.</Text>
-      <View style={styles.filaSueldo}>
-        <TextInput
-          style={styles.inputSueldo}
-          value={sueldoTexto}
-          onChangeText={(v) => setSueldoTexto(formatearEntradaMonto(v))}
-          placeholder="Ej: 600.000"
-          keyboardType="number-pad"
-        />
-        <Pressable style={({ pressed }) => [styles.botonSueldo, pressed && { opacity: 0.8 }]} onPress={guardarSueldo}>
-          <Text style={styles.textoBotonSueldo}>Guardar</Text>
-        </Pressable>
-      </View>
+      <Objetivo id="ajustes-sueldo">
+        <Text style={styles.seccion}>¿Cuánto cobrás por mes?</Text>
+        <Text style={styles.pista}>Lo uso para decirte qué parte de tu sueldo ya está ocupada.</Text>
+        <View style={styles.filaSueldo}>
+          <TextInput
+            style={styles.inputSueldo}
+            value={sueldoTexto}
+            onChangeText={(v) => setSueldoTexto(formatearEntradaMonto(v))}
+            placeholder="Ej: 600.000"
+            keyboardType="number-pad"
+          />
+          <Pressable style={({ pressed }) => [styles.botonSueldo, pressed && { opacity: 0.8 }]} onPress={guardarSueldo}>
+            <Text style={styles.textoBotonSueldo}>Guardar</Text>
+          </Pressable>
+        </View>
+        <RecibosSueldo onSueldo={(sueldo) => setSueldoTexto(montoATexto(sueldo))} />
+      </Objetivo>
 
-      <Text style={styles.seccion}>Tus tarjetas y billeteras</Text>
-      {medios.length > 0 && <Text style={styles.pista}>Tocá una para cambiarla.</Text>}
-      {medios.length === 0 && !mostrarFormulario && (
-        <Text style={styles.pista}>Agregá las tarjetas con las que pagás. Así sé cuándo vence cada cuota.</Text>
-      )}
+      <Objetivo id="ajustes-tarjetas">
+        <Text style={styles.seccion}>Tus tarjetas y billeteras</Text>
+        {medios.length > 0 && <Text style={styles.pista}>Tocá una para cambiarla.</Text>}
+        {medios.length === 0 && !mostrarFormulario && (
+          <Text style={styles.pista}>Agregá las tarjetas con las que pagás. Así sé cuándo vence cada cuota.</Text>
+        )}
+      </Objetivo>
 
       {medios.map((medio) =>
         editandoId === medio.id ? (
@@ -184,11 +225,14 @@ export default function Ajustes() {
             <View style={styles.info}>
               <Text style={styles.nombre}>{medio.nombre}</Text>
               <Text style={styles.detalle}>
-                {medio.tipo === 'credito'
-                  ? `Crédito · cierra el ${medio.dia_cierre} · vence el ${medio.dia_vencimiento}`
-                  : 'Débito'}
-                {medio.banco ? ` · ${medio.banco}` : ''}
+                {medio.tipo === 'credito' ? 'Crédito' : 'Débito'}
+                {medio.banco && medio.banco !== medio.nombre ? ` de ${medio.banco}` : ''}
               </Text>
+              {medio.tipo === 'credito' && (
+                <Text style={styles.detalle}>
+                  Cierra el {medio.dia_cierre} y vence el {medio.dia_vencimiento}
+                </Text>
+              )}
             </View>
             <Pressable onPress={() => confirmarBorrado(medio)} hitSlop={12} accessibilityLabel={`Borrar ${medio.nombre}`}>
               <Ionicons name="trash-outline" size={22} color={colores.textoTenue} />
@@ -267,9 +311,11 @@ export default function Ajustes() {
               <Ionicons name="notifications" size={20} color={colores.primario} />
             </View>
             <View style={styles.info}>
-              <Text style={styles.nombre}>Avisarme antes del cierre</Text>
+              <Text style={styles.nombre}>Avisarme antes del cierre y vencimientos</Text>
               <Text style={styles.detalle}>
-                {datos.esDemo ? 'No disponible en el modo de prueba.' : 'Te aviso un día antes de que cierre cada tarjeta.'}
+                {datos.esDemo
+                  ? 'No disponible en el modo de prueba.'
+                  : 'Un día antes de que cierre cada tarjeta y de que venza cada gasto fijo.'}
               </Text>
             </View>
             <Switch
@@ -283,13 +329,47 @@ export default function Ajustes() {
         </>
       )}
 
+      <Text style={[styles.seccion, styles.separada]}>Privacidad y seguridad</Text>
+      <View style={styles.tarjeta}>
+        <View style={styles.iconoMedio}>
+          <Ionicons name={bloqueo.biometria?.icono ?? 'lock-closed'} size={20} color={colores.primario} />
+        </View>
+        <View style={styles.info}>
+          <Text style={styles.nombre}>Pedir {bloqueo.biometria?.nombre ?? 'Face ID o huella'} al abrir</Text>
+          <Text style={styles.detalle}>
+            {datos.esDemo
+              ? 'No disponible en el modo de prueba.'
+              : bloqueo.biometria?.disponible
+                ? 'Así nadie más puede abrir la app desde tu celular.'
+                : 'Tu celular no tiene Face ID ni huella configurados.'}
+          </Text>
+        </View>
+        <Switch
+          value={bloqueo.activo}
+          onValueChange={cambiarBloqueo}
+          disabled={datos.esDemo || cambiandoBloqueo || (!bloqueo.biometria?.disponible && !bloqueo.activo)}
+          trackColor={{ true: colores.primario, false: colores.borde }}
+          thumbColor={colores.texto}
+        />
+      </View>
+      <Pressable style={({ pressed }) => [styles.tarjeta, pressed && { opacity: 0.8 }]} onPress={() => router.push('/privacidad')}>
+        <View style={styles.iconoMedio}>
+          <Ionicons name="shield-checkmark" size={20} color={colores.primario} />
+        </View>
+        <View style={styles.info}>
+          <Text style={styles.nombre}>Cómo cuidamos tus datos</Text>
+          <Text style={styles.detalle}>Qué se guarda, qué no y dónde.</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={colores.textoTenue} />
+      </Pressable>
+
       <Text style={[styles.seccion, styles.separada]}>Datos de hoy</Text>
       <View style={styles.datosHoy}>
         <Text style={styles.detalleGrande}>
-          💵 Dólar tarjeta: {indicadores.dolarTarjeta ? formatearMonto(indicadores.dolarTarjeta) : 'sin datos'}
+          Dólar tarjeta: {indicadores.dolarTarjeta ? formatearMonto(indicadores.dolarTarjeta) : 'sin datos'}
         </Text>
         <Text style={styles.detalleGrande}>
-          📈 Inflación{' '}
+          Inflación{' '}
           {indicadores.ultimaInflacion
             ? `de ${mesDeInflacion(indicadores.ultimaInflacion.mes)}: ${String(indicadores.ultimaInflacion.valor).replace('.', ',')}%`
             : ': sin datos (uso 2% por mes)'}
@@ -300,6 +380,11 @@ export default function Ajustes() {
       <Pressable style={({ pressed }) => [styles.botonSalir, pressed && { opacity: 0.7 }]} onPress={() => datos.salir()}>
         <Text style={styles.textoSalir}>{soloDemo ? 'Volver a empezar la prueba' : datos.esDemo ? 'Salir del modo de prueba' : 'Cerrar sesión'}</Text>
       </Pressable>
+      {!datos.esDemo && (
+        <Pressable onPress={borrarCuenta} hitSlop={10} style={styles.borrarCuenta}>
+          <Text style={styles.textoBorrarCuenta}>Borrar mi cuenta</Text>
+        </Pressable>
+      )}
     </ScrollView>
   );
 }
@@ -315,13 +400,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colores.superficie,
     color: colores.texto,
-    borderRadius: 14,
+    borderRadius: radios.grande,
     padding: 14,
     fontSize: 18,
     borderWidth: 1,
     borderColor: colores.borde,
   },
-  botonSueldo: { backgroundColor: colores.primario, borderRadius: 14, paddingHorizontal: 20, justifyContent: 'center' },
+  botonSueldo: { backgroundColor: colores.primario, borderRadius: radios.medio, paddingHorizontal: 20, justifyContent: 'center' },
   textoBotonSueldo: { color: colores.sobrePrimario, fontWeight: 'bold', fontSize: 16 },
   tarjeta: {
     flexDirection: 'row',
@@ -333,7 +418,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colores.borde,
   },
-  iconoMedio: { width: 40, height: 40, borderRadius: 12, backgroundColor: colores.primarioSuave, alignItems: 'center', justifyContent: 'center' },
+  iconoMedio: { width: 40, height: 40, borderRadius: radios.chico, backgroundColor: colores.primarioSuave, alignItems: 'center', justifyContent: 'center' },
   info: { flex: 1, marginLeft: 12, marginRight: 8 },
   nombre: { color: colores.texto, fontSize: 16, fontWeight: '600' },
   detalle: { color: colores.textoSecundario, fontSize: 13, marginTop: 2 },
@@ -345,7 +430,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderStyle: 'dashed',
     borderColor: colores.primario,
-    borderRadius: 16,
+    borderRadius: radios.grande,
     padding: 16,
     marginTop: 4,
   },
@@ -365,6 +450,8 @@ const styles = StyleSheet.create({
   datosHoy: { backgroundColor: colores.superficie, borderRadius: radios.grande, padding: 16, gap: 8, borderWidth: 1, borderColor: colores.borde },
   detalleGrande: { color: colores.textoChip, fontSize: 15 },
   fuente: { color: colores.textoTenue, fontSize: 12, marginTop: 4 },
-  botonSalir: { marginTop: 40, alignItems: 'center', padding: 14, borderRadius: 14, borderWidth: 1, borderColor: colores.peligro },
+  botonSalir: { marginTop: 40, alignItems: 'center', padding: 14, borderRadius: radios.medio, borderWidth: 1, borderColor: colores.peligro },
+  borrarCuenta: { alignSelf: 'center', marginTop: 22, padding: 6 },
+  textoBorrarCuenta: { color: colores.textoTenue, fontSize: 14, textDecorationLine: 'underline' },
   textoSalir: { color: colores.peligro, fontWeight: 'bold', fontSize: 16 },
 });

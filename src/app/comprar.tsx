@@ -14,6 +14,7 @@ import { diasEntre, formatearDia, formatearMes, formatearMonto, tarjetasParaHoy 
 import { formatearEntradaMonto, leerMonto } from '../lib/formato';
 import { mesDeInflacion, useIndicadores } from '../lib/indicadores';
 import type { GastoGuardado, MedioPago } from '../lib/tipos';
+import { Objetivo, useRecorridoSeccion } from '../components/Tutorial';
 
 const OPCIONES_CUOTAS = [1, 3, 6, 9, 12, 18, 24];
 const EFECTIVO = 'efectivo';
@@ -29,6 +30,7 @@ const ESTILO_NIVEL: Record<Nivel, { icono: keyof typeof Ionicons.glyphMap; color
 const leerPorcentaje = (texto: string) => Number(texto.replace(',', '.')) || 0;
 
 export default function Comprar() {
+  const ayuda = useRecorridoSeccion('comprar');
   const datos = useDatos();
   const aviso = useAviso();
   const indicadores = useIndicadores();
@@ -91,91 +93,93 @@ export default function Comprar() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
-      <Encabezado titulo="¿Lo compro?" subtitulo="Poné el precio y te digo si te conviene." />
+      <Encabezado titulo="¿Lo compro?" subtitulo="Poné el precio y te digo si te conviene." volver ayuda={ayuda} />
 
-      <View style={styles.tarjeta}>
-        <Text style={styles.pregunta}>¿Cuánto cuesta?</Text>
-        <View style={styles.cajaPrecio}>
-          <Text style={styles.signo}>$</Text>
-          <TextInput
-            style={styles.inputPrecio}
-            value={precio}
-            onChangeText={(v) => setPrecio(formatearEntradaMonto(v))}
-            placeholder="0"
-            keyboardType="decimal-pad"
-          />
-        </View>
-
-        <Text style={styles.pregunta}>¿Con qué lo pagarías?</Text>
-        <View style={styles.chips}>
-          {opcionesTarjeta.map((o, i) => (
-            <Chip
-              key={o.medio.id}
-              etiqueta={i === 0 && opcionesTarjeta.length > 1 ? `⭐ ${o.medio.nombre}` : o.medio.nombre}
-              activo={medioId === o.medio.id}
-              onPress={() => setMedioId(o.medio.id)}
+      <Objetivo id="comprar-datos">
+        <View style={styles.tarjeta}>
+          <Text style={styles.pregunta}>¿Cuánto cuesta?</Text>
+          <View style={styles.cajaPrecio}>
+            <Text style={styles.signo}>$</Text>
+            <TextInput
+              style={styles.inputPrecio}
+              value={precio}
+              onChangeText={(v) => setPrecio(formatearEntradaMonto(v))}
+              placeholder="0"
+              keyboardType="decimal-pad"
             />
-          ))}
-          <Chip
-            etiqueta="Efectivo o débito"
-            activo={!esCredito}
-            onPress={() => {
-              setMedioId(EFECTIVO);
-              setCuotas(1);
-            }}
-          />
-        </View>
-        {opcionesTarjeta.length > 1 && <Text style={styles.ayuda}>⭐ = la tarjeta que más tarde pagás si comprás hoy</Text>}
-        {opcionesTarjeta.length === 0 && (
-          <Text style={styles.ayuda}>Para ver cuotas, agregá una tarjeta de crédito en Ajustes.</Text>
-        )}
+          </View>
 
-        {esCredito && (
-          <>
-            <Text style={styles.pregunta}>¿En cuántas cuotas?</Text>
-            <View style={styles.chips}>
-              {OPCIONES_CUOTAS.map((n) => (
-                <Chip key={n} etiqueta={n === 1 ? '1 pago' : `${n}`} activo={cuotas === n} onPress={() => setCuotas(n)} />
-              ))}
-            </View>
-          </>
-        )}
-
-        <Pressable style={styles.masOpciones} onPress={() => setMasOpciones(!masOpciones)}>
-          <Text style={styles.masOpcionesTexto}>{masOpciones ? 'Menos opciones' : 'Más opciones (descuentos, recargos, inflación)'}</Text>
-          <Ionicons name={masOpciones ? 'chevron-up' : 'chevron-down'} size={16} color={colores.primario} />
-        </Pressable>
-
-        {masOpciones && (
-          <Animated.View entering={FadeIn}>
-            <Campo
-              etiqueta="Descuento si pagás en efectivo o en un pago (%)"
-              valor={descuento}
-              onCambio={setDescuento}
-              placeholder="Ej: 10"
-            />
-            {esCredito && cuotas > 1 && (
-              <Campo
-                etiqueta="Total a pagar en cuotas, si tiene recargo"
-                valor={totalCuotas}
-                onCambio={(v) => setTotalCuotas(formatearEntradaMonto(v))}
-                placeholder="Igual al precio"
+          <Text style={styles.pregunta}>¿Con qué lo pagarías?</Text>
+          <View style={styles.chips}>
+            {opcionesTarjeta.map((o, i) => (
+              <Chip
+                key={o.medio.id}
+                etiqueta={i === 0 && opcionesTarjeta.length > 1 ? `⭐ ${o.medio.nombre}` : o.medio.nombre}
+                activo={medioId === o.medio.id}
+                onPress={() => setMedioId(o.medio.id)}
               />
-            )}
-            <Campo
-              etiqueta="Inflación por mes que esperás (%)"
-              valor={inflacionPorcentaje}
-              onCambio={setInflacionTexto}
-              placeholder="2"
+            ))}
+            <Chip
+              etiqueta="Efectivo o débito"
+              activo={!esCredito}
+              onPress={() => {
+                setMedioId(EFECTIVO);
+                setCuotas(1);
+              }}
             />
-            <Text style={styles.ayuda}>
-              {indicadores.ultimaInflacion
-                ? `Usamos el promedio de los últimos 3 meses del INDEC (en ${mesDeInflacion(indicadores.ultimaInflacion.mes)} fue ${String(indicadores.ultimaInflacion.valor).replace('.', ',')}%).`
-                : 'Sin datos del INDEC por ahora: usamos 2% por mes.'}
-            </Text>
-          </Animated.View>
-        )}
-      </View>
+          </View>
+          {opcionesTarjeta.length > 1 && <Text style={styles.ayuda}>⭐ = la tarjeta que más tarde pagás si comprás hoy</Text>}
+          {opcionesTarjeta.length === 0 && (
+            <Text style={styles.ayuda}>Para ver cuotas, agregá una tarjeta de crédito en Ajustes.</Text>
+          )}
+
+          {esCredito && (
+            <>
+              <Text style={styles.pregunta}>¿En cuántas cuotas?</Text>
+              <View style={styles.chips}>
+                {OPCIONES_CUOTAS.map((n) => (
+                  <Chip key={n} etiqueta={n === 1 ? '1 pago' : `${n}`} activo={cuotas === n} onPress={() => setCuotas(n)} />
+                ))}
+              </View>
+            </>
+          )}
+
+          <Pressable style={styles.masOpciones} onPress={() => setMasOpciones(!masOpciones)}>
+            <Text style={styles.masOpcionesTexto}>{masOpciones ? 'Menos opciones' : 'Más opciones (descuentos, recargos, inflación)'}</Text>
+            <Ionicons name={masOpciones ? 'chevron-up' : 'chevron-down'} size={16} color={colores.primario} />
+          </Pressable>
+
+          {masOpciones && (
+            <Animated.View entering={FadeIn}>
+              <Campo
+                etiqueta="Descuento si pagás en efectivo o en un pago (%)"
+                valor={descuento}
+                onCambio={setDescuento}
+                placeholder="Ej: 10"
+              />
+              {esCredito && cuotas > 1 && (
+                <Campo
+                  etiqueta="Total a pagar en cuotas, si tiene recargo"
+                  valor={totalCuotas}
+                  onCambio={(v) => setTotalCuotas(formatearEntradaMonto(v))}
+                  placeholder="Igual al precio"
+                />
+              )}
+              <Campo
+                etiqueta="Inflación por mes que esperás (%)"
+                valor={inflacionPorcentaje}
+                onCambio={setInflacionTexto}
+                placeholder="2"
+              />
+              <Text style={styles.ayuda}>
+                {indicadores.ultimaInflacion
+                  ? `Usamos el promedio de los últimos 3 meses del INDEC (en ${mesDeInflacion(indicadores.ultimaInflacion.mes)} fue ${String(indicadores.ultimaInflacion.valor).replace('.', ',')}%).`
+                  : 'Sin datos del INDEC por ahora: usamos 2% por mes.'}
+              </Text>
+            </Animated.View>
+          )}
+        </View>
+      </Objetivo>
 
       {!respuesta && (
         <View style={styles.vacio}>

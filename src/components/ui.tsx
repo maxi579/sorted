@@ -1,4 +1,6 @@
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -15,7 +17,8 @@ import {
 } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colores, fuentes, radios } from '../constants/tema';
+import { colores, espacios, fuentes, radios } from '../constants/tema';
+import { Objetivo } from './Foco';
 
 const PressableAnimado = Animated.createAnimatedComponent(Pressable);
 
@@ -40,7 +43,16 @@ export function Texto({ style, ...props }: TextProps) {
 
 // Igual que TextInput, pero con nuestra fuente y el color de placeholder del tema
 export function Entrada({ style, ...props }: TextInputProps) {
-  return <RNTextInput placeholderTextColor={colores.textoTenue} {...props} style={[{ fontFamily: fuentes.regular }, style]} />;
+  return (
+    <RNTextInput
+      placeholderTextColor={colores.textoTenue}
+      selectionColor={colores.primario}
+      cursorColor={colores.primario}
+      keyboardAppearance="dark"
+      {...props}
+      style={[{ fontFamily: fuentes.regular }, style]}
+    />
+  );
 }
 
 type Variante = 'primario' | 'secundario' | 'peligro';
@@ -51,7 +63,7 @@ export function Boton({ titulo, onPress, variante = 'primario', cargando = false
   const escala = useSharedValue(1);
   const estiloAnimado = useAnimatedStyle(() => ({ transform: [{ scale: escala.value }] }));
   const colorTexto =
-    variante === 'primario' ? colores.sobrePrimario : variante === 'peligro' ? colores.peligro : colores.textoChip;
+    variante === 'primario' ? colores.sobrePrimario : variante === 'peligro' ? colores.peligro : colores.texto;
 
   return (
     <PressableAnimado
@@ -62,6 +74,9 @@ export function Boton({ titulo, onPress, variante = 'primario', cargando = false
         onPress();
       }}
       disabled={cargando}
+      accessibilityRole="button"
+      accessibilityLabel={titulo}
+      accessibilityState={{ disabled: cargando, busy: cargando }}
       style={[styles.boton, styles[variante], estiloAnimado, estilo]}
     >
       {cargando ? <ActivityIndicator color={colorTexto} /> : <Texto style={[styles.textoBoton, { color: colorTexto }]}>{titulo}</Texto>}
@@ -75,6 +90,9 @@ export function Chip({ etiqueta, activo, onPress }: PropsChip) {
   return (
     <Pressable
       style={({ pressed }) => [styles.chip, activo && styles.chipActivo, pressed && styles.presionado]}
+      hitSlop={espacios.xs}
+      accessibilityRole="button"
+      accessibilityState={{ selected: activo }}
       onPress={() => {
         Haptics.selectionAsync();
         onPress();
@@ -91,7 +109,7 @@ export function Campo({ etiqueta, contenedor, style, ...props }: PropsCampo) {
   return (
     <View style={contenedor}>
       <Etiqueta>{etiqueta}</Etiqueta>
-      <Entrada style={[styles.input, style]} {...props} />
+      <Entrada accessibilityLabel={etiqueta} style={[styles.input, style]} {...props} />
     </View>
   );
 }
@@ -104,12 +122,36 @@ export function Tarjeta({ children, estilo }: { children: ReactNode; estilo?: Vi
   return <View style={[styles.tarjeta, estilo]}>{children}</View>;
 }
 
-// Título grande de cada pantalla, con espacio para el notch del celular
-export function Encabezado({ titulo, subtitulo }: { titulo: string; subtitulo?: string }) {
+// Título grande de cada pantalla, con espacio para el notch del celular.
+// volver: muestra "← Volver" (para las pantallas que no tienen pestaña propia)
+// ayuda: muestra un ❓ a la derecha del título que abre la explicación de la sección
+export function Encabezado({ titulo, subtitulo, volver = false, ayuda }: { titulo: string; subtitulo?: string; volver?: boolean; ayuda?: () => void }) {
   const insets = useSafeAreaInsets();
   return (
-    <View style={{ paddingTop: insets.top + 12, marginBottom: 18 }}>
-      <Texto style={styles.tituloGrande}>{titulo}</Texto>
+    <View style={{ paddingTop: insets.top + espacios.m, marginBottom: espacios.xl }}>
+      {volver && (
+        <Pressable
+          onPress={() => (router.canGoBack() ? router.back() : router.navigate('/'))}
+          hitSlop={12}
+          style={({ pressed }) => [styles.volver, pressed && styles.presionado]}
+          accessibilityLabel="Volver"
+        >
+          <Ionicons name="chevron-back" size={20} color={colores.primario} />
+          <Texto style={styles.textoVolver}>Volver</Texto>
+        </Pressable>
+      )}
+      <View style={styles.filaTitulo}>
+        <Texto style={[styles.tituloGrande, { flex: 1 }]} accessibilityRole="header">
+          {titulo}
+        </Texto>
+        {ayuda && (
+          <Objetivo id="boton-ayuda">
+            <Pressable onPress={ayuda} hitSlop={12} style={({ pressed }) => [styles.ayuda, pressed && styles.presionado]} accessibilityLabel="Cómo funciona esta sección">
+              <Ionicons name="help-circle-outline" size={28} color={colores.textoSecundario} />
+            </Pressable>
+          </Objetivo>
+        )}
+      </View>
       {subtitulo && <Texto style={styles.subtituloGrande}>{subtitulo}</Texto>}
     </View>
   );
@@ -128,27 +170,33 @@ export function confirmar(titulo: string, mensaje: string, textoAccion: string, 
 }
 
 const styles = StyleSheet.create({
-  boton: { borderRadius: radios.medio, padding: 15, alignItems: 'center', justifyContent: 'center' },
+  boton: { minHeight: 50, borderRadius: radios.medio, paddingHorizontal: espacios.xl, alignItems: 'center', justifyContent: 'center' },
   primario: { backgroundColor: colores.primario },
-  secundario: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colores.borde },
+  secundario: { backgroundColor: colores.superficieAlta },
   peligro: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colores.peligro },
   presionado: { opacity: 0.75 },
   textoBoton: { fontWeight: 'bold', fontSize: 16 },
-  chip: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: colores.borde },
+  chip: { minHeight: 40, justifyContent: 'center', paddingHorizontal: espacios.l, borderRadius: 999, borderWidth: 1, borderColor: colores.borde },
   chipActivo: { backgroundColor: colores.primario, borderColor: colores.primario },
-  textoChip: { color: colores.textoChip, fontWeight: '600' },
+  textoChip: { color: colores.textoChip, fontSize: 14, fontWeight: '600' },
   textoChipActivo: { color: colores.sobrePrimario },
-  etiqueta: { color: colores.textoSecundario, fontSize: 13, marginTop: 12, marginBottom: 6 },
+  etiqueta: { color: colores.textoSecundario, fontSize: 13, fontWeight: '500', marginTop: espacios.l, marginBottom: espacios.s },
   input: {
-    backgroundColor: colores.fondo,
+    backgroundColor: colores.superficieAlta,
     color: colores.texto,
     borderRadius: radios.chico,
-    padding: 13,
+    minHeight: 50,
+    paddingHorizontal: espacios.m,
+    paddingVertical: espacios.m,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: colores.borde,
+    borderColor: 'transparent',
   },
-  tarjeta: { backgroundColor: colores.superficie, borderRadius: radios.grande, padding: 16, borderWidth: 1, borderColor: colores.borde },
-  tituloGrande: { color: colores.texto, fontSize: 30, fontWeight: '800', letterSpacing: -0.8 },
-  subtituloGrande: { color: colores.textoSecundario, fontSize: 15, marginTop: 4 },
+  tarjeta: { backgroundColor: colores.superficie, borderRadius: radios.grande, padding: espacios.l, borderWidth: 1, borderColor: colores.borde },
+  filaTitulo: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  ayuda: { padding: 2 },
+  volver: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', marginBottom: 8, marginLeft: -4 },
+  textoVolver: { color: colores.primario, fontSize: 16, fontWeight: '600' },
+  tituloGrande: { color: colores.texto, fontSize: 28, fontWeight: '700', letterSpacing: -0.4 },
+  subtituloGrande: { color: colores.textoSecundario, fontSize: 15, marginTop: espacios.xs },
 });

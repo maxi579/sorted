@@ -1,14 +1,19 @@
 {
   "expo": {
-    "name": "app-gastos",
-    "slug": "app-gastos",
+    "name": "Sorted",
+    "slug": "sorted",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "appgastos",
+    "scheme": [
+      "sorted",
+      "appgastos"
+    ],
     "userInterfaceStyle": "dark",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/images/icon.png",
+      "usesAppleSignIn": true,
+      "bundleIdentifier": "com.maxi579.sorted"
     },
     "android": {
       "adaptiveIcon": {
@@ -17,7 +22,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.maxi579.sorted"
     },
     "web": {
       "output": "static",
@@ -32,12 +38,40 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Para leer las capturas y fotos de tus tickets y comprobantes.",
+          "cameraPermission": "Para sacarle una foto al ticket o la factura y anotarla sola.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-apple-authentication",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Para que solo vos puedas abrir Sorted con Face ID."
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
-    "backgroundColor": "#0b1120"
+    "backgroundColor": "#0b1120",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7d1fe309-48d4-43e4-b9c9-c531b8704e9a"
+      }
+    },
+    "owner": "maxi755",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/7d1fe309-48d4-43e4-b9c9-c531b8704e9a"
+    }
   }
 }
